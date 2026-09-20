@@ -87,6 +87,9 @@ class SmartSegmentationPlugin(Star):
         if not self._should_segment_text(text, settings):
             return
 
+        # A failed attempt must not reuse an earlier result for identical text.
+        self._pop_prepared_segments(event.unified_msg_origin, text)
+
         provider_id = await self._resolve_provider_id(event, settings)
         if not provider_id:
             logger.warning("智能分段未找到可用 provider_id，跳过本次分段")
@@ -103,12 +106,13 @@ class SmartSegmentationPlugin(Star):
             )
         except TimeoutError:
             logger.warning(
-                "智能分段 LLM 调用超时（> %.2fs），已跳过本次回复",
+                "智能分段 LLM 调用超时（> %.2fs），已跳过分段，原文继续发送",
                 settings.timeout_seconds,
             )
             return
         except Exception as exc:
-            logger.error("智能分段 LLM 调用失败: %s", exc, exc_info=True)
+            logger.warning("智能分段 LLM 调用失败，已跳过分段，原文继续发送: %s", exc)
+            logger.debug("智能分段 LLM 异常详情", exc_info=True)
             return
 
         if not segments or len(segments) <= 1:
